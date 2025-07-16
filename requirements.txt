@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+pydantic
+openai
+requests
+beautifulsoup4
+pandas
+numpy
+duckdb
+matplotlib
+loguru
+python-dotenv
+pytest
+
