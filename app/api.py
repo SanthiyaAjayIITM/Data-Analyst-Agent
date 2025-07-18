@@ -19,7 +19,7 @@ class TaskResponse(BaseModel):
     result: dict
 
 @router.post("/", response_model=TaskResponse, tags=["Tasks"])
-async def handle_task(req: TaskRequest):
+async def handle_task_endpoint(req: TaskRequest):
     """
     Receive the question text, delegate to orchestrator.handle_task,
     and return its result.
