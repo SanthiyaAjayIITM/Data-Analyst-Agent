@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from app.orchestrator import handle_task
 
 router = APIRouter()
 
@@ -18,10 +19,15 @@ class TaskResponse(BaseModel):
     result: dict
 
 @router.post("/", response_model=TaskResponse, tags=["Tasks"])
-async def handle_task(request: TaskRequest):
+async def handle_task(req: TaskRequest):
     """
-    Placeholder: receive the question text, and return an empty result.
-    We'll implement this tomorrow.
+    Receive the question text, delegate to orchestrator.handle_task,
+    and return its result.
     """
     # For now, just echo back an empty result
-    return TaskResponse(result={})
+    try:
+        result = handle_task(req.question_text)
+        return TaskResponse(result=result)
+    except Exception as e:
+        # In future, refine error handling
+        raise HTTPException(status_code=500, detail=str(e))
