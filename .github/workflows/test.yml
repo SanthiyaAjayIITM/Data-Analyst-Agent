@@ -3,7 +3,10 @@ name: Test App
 on: [push, pull_request]
 
 jobs:
-  test:
+  test:    
+    # Make the workspace root importable as a module 
+    env:
+      PYTHONPATH: ${{ github.workspace }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
