@@ -1,5 +1,6 @@
 import re
 from typing import Dict
+from app.scraper import scrape_wikipedia_table
 
 def parse_task(question_text: str) -> Dict[str, str]:
     """
@@ -32,6 +33,18 @@ def handle_task(question_text: str) -> dict:
     Parse the question, then (for now) echo back the detection.
     """
     parsed = ask_llm_to_parse(question_text)
+    
+    if parsed["task_type"] == "scrape":
+        # For scraping, fetch the table and return it
+        df = scrape_wikipedia_table(parsed["param"])
+        return {
+            "echo": question_text,
+            **parsed,
+            "row_count": len(df),
+            "columns": df.columns.tolist()
+        }
+    
+    # fallback for other task types
     return {"echo": question_text, **parsed}
 
 def ask_llm_to_parse(question_text: str) -> Dict[str, str]:
