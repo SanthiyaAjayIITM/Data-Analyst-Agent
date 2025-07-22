@@ -1,13 +1,44 @@
-"""
-Orchestrator: routes incoming question_text
-to the correct data‑analysis function.
-"""
+import re
+from typing import Dict
+
+def parse_task(question_text: str) -> Dict[str, str]:
+    """
+    Rudimentary parser that inspects the question text
+    and returns a dict with:
+      - task_type: one of ["scrape", "query", "plot", "unknown"]
+      - param: e.g. URL for scraping or SQL for query (empty if unknown)
+    """
+    text = question_text.lower()
+
+    # Scrape if it mentions wikipedia URL
+    url_match = re.search(r'(https?://\S+)', question_text)
+    if url_match:
+        url = url_match.group(1)
+        return {"task_type": "scrape", "param": url}
+
+    # DuckDB/SQL query if it contains SQL keywords
+    if any(kw in text for kw in ("select ", "from ", "where ")):
+        return {"task_type": "query", "param": question_text.strip()}
+
+    # Plot if it mentions "plot" or "scatter"
+    if "plot" in text or "scatter" in text:
+        return {"task_type": "plot", "param": question_text.strip()}
+
+    return {"task_type": "unknown", "param": ""}
+    
 
 def handle_task(question_text: str) -> dict:
     """
-    TODO: parse question_text, decide whether to scrape,
-    query DuckDB, compute metrics, or plot.
-    For now, return a placeholder dict.
+    Parse the question, then (for now) echo back the detection.
     """
-    # Placeholder: echo back the question
-    return {"echo": question_text}
+    parsed = ask_llm_to_parse(question_text)
+    return {"echo": question_text, **parsed}
+
+def ask_llm_to_parse(question_text: str) -> Dict[str, str]:
+    """
+    Placeholder for LLM-based parsing.
+    Later, this will call OpenAI ChatCompletion to get
+    structured task_type & param.
+    """
+    # For now, just defer to our regex parser:
+    return parse_task(question_text)
