@@ -1,6 +1,7 @@
 import re
 from typing import Dict
 from app.scraper import scrape_wikipedia_table
+from app.duckdb_client import query_duckdb
 
 def parse_task(question_text: str) -> Dict[str, str]:
     """
@@ -43,6 +44,16 @@ def handle_task(question_text: str) -> dict:
             "row_count": len(df),
             "columns": df.columns.tolist()
         }
+
+    if parsed["task_type"] == "query":
+        # For queries, run the SQL and return the DataFrame
+        df = query_duckdb(parsed["param"])
+        return {
+            "echo": question_text,
+            **parsed,
+            "row_count": len(df),
+            "columns": df.columns.tolist()
+        }    
     
     # fallback for other task types
     return {"echo": question_text, **parsed}
