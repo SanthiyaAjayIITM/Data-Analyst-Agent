@@ -2,6 +2,7 @@ import re
 from typing import Dict
 from app.scraper import scrape_wikipedia_table
 from app.duckdb_client import query_duckdb
+from app.plotter import scatter_with_regression
 
 def parse_task(question_text: str) -> Dict[str, str]:
     """
@@ -55,6 +56,20 @@ def handle_task(question_text: str) -> dict:
             "columns": df.columns.tolist()
         }    
     
+    if parsed["task_type"] == "plot":
+        # For simplicity, assume param is CSV text: "x1,x2,...;y1,y2,..."
+        # Or later parse a DataFrame; for now, we'll stub:
+        parts = parsed["param"].split(";")
+        x = [float(v) for v in parts[0].split(",")]
+        y = [float(v) for v in parts[1].split(",")]
+        from app.plotter import scatter_with_regression
+        img_uri = scatter_with_regression(x, y, "x", "y")
+        return {
+            "echo": question_text,
+            **parsed,
+            "image": img_uri
+        }
+
     # fallback for other task types
     return {"echo": question_text, **parsed}
 
