@@ -1,83 +1,110 @@
 import re
-from typing import Dict
-from app.scraper import scrape_wikipedia_table
+from typing import Dict, Tuple, Optional
+
+import app.scraper as scraper_module
 from app.duckdb_client import query_duckdb
-from app.plotter import scatter_with_regression
+import app.plotter as plotter_module
+
+
+def extract_plot_columns(text: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    From text like "Plot Rank vs Peak...", extract ("Rank", "Peak").
+    """
+    low = text.lower()
+    idx = low.find(" vs ")
+    if idx == -1:
+        return None, None
+    left = text[:idx].strip()
+    right = text[idx + 4 :].strip()
+    x_col = left.split()[-1] if left else None
+    y_col = right.split()[0] if right else None
+    return x_col, y_col
+
 
 def parse_task(question_text: str) -> Dict[str, str]:
     """
-    Rudimentary parser that inspects the question text
-    and returns a dict with:
-      - task_type: one of ["scrape", "query", "plot", "unknown"]
-      - param: e.g. URL for scraping or SQL for query (empty if unknown)
+    Determine task type and param.
     """
     text = question_text.lower()
 
-    # Scrape if it mentions wikipedia URL
-    url_match = re.search(r'(https?://\S+)', question_text)
-    if url_match:
-        url = url_match.group(1)
+    # 1. Scrape if keyword 'scrape' present
+    if "scrape" in text:
+        m = re.search(r'https?://[^\s]+', question_text)
+        url = m.group(0) if m else ""
         return {"task_type": "scrape", "param": url}
 
-    # DuckDB/SQL query if it contains SQL keywords
+    # 2. Query if SQL keywords present
     if any(kw in text for kw in ("select ", "from ", "where ")):
         return {"task_type": "query", "param": question_text.strip()}
 
-    # Plot if it mentions "plot" or "scatter"
+    # 3. Plot if mentions plot or scatter
     if "plot" in text or "scatter" in text:
         return {"task_type": "plot", "param": question_text.strip()}
 
+    # 4. Fallback
     return {"task_type": "unknown", "param": ""}
-    
+
+
+def ask_llm_to_parse(question_text: str) -> Dict[str, str]:
+    """
+    Placeholder for future LLM parsing.
+    """
+    return parse_task(question_text)
+
 
 def handle_task(question_text: str) -> dict:
     """
-    Parse the question, then (for now) echo back the detection.
+    Parse the question, then dispatch to the correct executor.
     """
     parsed = ask_llm_to_parse(question_text)
-    
+
+    # Scrape path
     if parsed["task_type"] == "scrape":
-        # For scraping, fetch the table and return it
-        df = scrape_wikipedia_table(parsed["param"])
+        df = scraper_module.scrape_wikipedia_table(parsed["param"])
         return {
             "echo": question_text,
             **parsed,
             "row_count": len(df),
-            "columns": df.columns.tolist()
+            "columns": df.columns.tolist(),
         }
 
+    # Query path
     if parsed["task_type"] == "query":
-        # For queries, run the SQL and return the DataFrame
         df = query_duckdb(parsed["param"])
         return {
             "echo": question_text,
             **parsed,
             "row_count": len(df),
-            "columns": df.columns.tolist()
-        }    
-    
-    if parsed["task_type"] == "plot":
-        # For simplicity, assume param is CSV text: "x1,x2,...;y1,y2,..."
-        # Or later parse a DataFrame; for now, we'll stub:
-        parts = parsed["param"].split(";")
-        x = [float(v) for v in parts[0].split(",")]
-        y = [float(v) for v in parts[1].split(",")]
-        from app.plotter import scatter_with_regression
-        img_uri = scatter_with_regression(x, y, "x", "y")
-        return {
-            "echo": question_text,
-            **parsed,
-            "image": img_uri
+            "columns": df.columns.tolist(),
         }
 
-    # fallback for other task types
-    return {"echo": question_text, **parsed}
+    # Plot path
+    if parsed["task_type"] == "plot":
+        param = parsed.get("param", "")
 
-def ask_llm_to_parse(question_text: str) -> Dict[str, str]:
-    """
-    Placeholder for LLM-based parsing.
-    Later, this will call OpenAI ChatCompletion to get
-    structured task_type & param.
-    """
-    # For now, just defer to our regex parser:
-    return parse_task(question_text)
+        # Legacy semicolon‑format support (for tests)
+        if ";" in param and all(
+            c.isdigit() or c in ",.;" for c in param.replace(" ", "")
+        ):
+            xs, ys = param.split(";")
+            x_vals = [float(v) for v in xs.split(",") if v]
+            y_vals = [float(v) for v in ys.split(",") if v]
+            img = plotter_module.scatter_with_regression(x_vals, y_vals, "x", "y")
+            return {"echo": question_text, **parsed, "image": img}
+
+        # Real‑data plotting
+        x_col, y_col = extract_plot_columns(question_text)
+        if not x_col or not y_col:
+            raise ValueError("Could not extract columns for plot")
+
+        df = scraper_module.scrape_wikipedia_table(parsed["param"])
+        if x_col not in df.columns or y_col not in df.columns:
+            raise ValueError(f"Columns {x_col!r} or {y_col!r} not found in data")
+
+        x_vals = df[x_col].astype(float).tolist()
+        y_vals = df[y_col].astype(float).tolist()
+        img = plotter_module.scatter_with_regression(x_vals, y_vals, x_col, y_col)
+        return {"echo": question_text, **parsed, "image": img}
+
+    # Fallback echo
+    return {"echo": question_text, **parsed}

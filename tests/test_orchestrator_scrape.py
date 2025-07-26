@@ -11,7 +11,7 @@ def test_handle_task_scrape(monkeypatch):
     # 2. Stub scraper to return a small DataFrame
     df_fake = pd.DataFrame({"X": [10, 20]})
     monkeypatch.setattr(
-        "app.orchestrator.scrape_wikipedia_table",
+        "app.scraper.scrape_wikipedia_table",
         lambda url: df_fake
     )
 
