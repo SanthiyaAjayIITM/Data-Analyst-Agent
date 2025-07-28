@@ -4,6 +4,7 @@ from typing import Dict, Tuple, Optional
 import app.scraper as scraper_module
 from app.duckdb_client import query_duckdb
 import app.plotter as plotter_module
+from app.analyzer import compute_correlation
 
 
 def extract_plot_columns(text: str) -> Tuple[Optional[str], Optional[str]]:
@@ -61,6 +62,23 @@ def handle_task(question_text: str) -> dict:
     # Scrape path
     if parsed["task_type"] == "scrape":
         df = scraper_module.scrape_wikipedia_table(parsed["param"])
+
+        # 1) Film‑analysis path
+        if "film" in question_text.lower():
+            from app.analyzer import compute_correlation
+            count_2bn = int(((df["Worldwide"] >= 2_000_000_000) & (df["Year"] < 2020)).sum())
+            df15 = df[df["Worldwide"] >= 1_500_000_000]
+            earliest = df15.loc[df15["Year"].idxmin(), "Title"] if not df15.empty else ""
+            corr = compute_correlation(df, "Rank", "Peak")
+            return {
+                "echo": question_text,
+                **parsed,
+                "count_2bn_before_2020": count_2bn,
+                "earliest_over_1.5bn": earliest,
+                "rank_peak_corr": corr,
+            }
+
+        # 2) Generic scrape path
         return {
             "echo": question_text,
             **parsed,
