@@ -3,6 +3,7 @@ from typing import Dict, Tuple, Optional
 
 import app.scraper as scraper_module
 from app.duckdb_client import query_duckdb
+from app.highcourt import get_most_active_court, compute_delay_slope
 import app.plotter as plotter_module
 from app.analyzer import compute_correlation
 
@@ -88,13 +89,24 @@ def handle_task(question_text: str) -> dict:
 
     # Query path
     if parsed["task_type"] == "query":
+        text = question_text.lower()
+
+        # 1) Most active court question
+        if "disposed the most cases" in text:
+            court = get_most_active_court(2019, 2022)
+            return {"echo": question_text, **parsed, "most_active_court": court}
+
+        # 2) Delay slope by court
+        if "regression slope" in text:
+            # extract court_code from param or text
+            m = re.search(r"court=([\w_]+)", text)
+            code = m.group(1) if m else parsed["param"]
+            slope = compute_delay_slope(code)
+            return {"echo": question_text, **parsed, "delay_slope": slope}
+
+        # 3) Generic SQL flow
         df = query_duckdb(parsed["param"])
-        return {
-            "echo": question_text,
-            **parsed,
-            "row_count": len(df),
-            "columns": df.columns.tolist(),
-        }
+        return {"echo": question_text, **parsed, "row_count": len(df), "columns": df.columns.tolist()}
 
     # Plot path
     if parsed["task_type"] == "plot":
