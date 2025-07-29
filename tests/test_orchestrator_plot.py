@@ -21,3 +21,20 @@ def test_handle_task_plot(monkeypatch):
     assert res["param"] == "0,1,2;0,1,2"
     assert res["echo"] == "Plot this"
     assert res["image"] == "data:image/png;base64,TEST"
+
+def test_handle_task_plot_column_fail(monkeypatch):
+    # 1. Force parse to plot
+    monkeypatch.setattr(
+        "app.orchestrator.ask_llm_to_parse",
+        lambda t: {"task_type": "plot", "param": "http://example.com"}
+    )
+    # 2. Stub extract_plot_columns to return no columns
+    monkeypatch.setattr(
+        "app.orchestrator.extract_plot_columns",
+        lambda t: (None, None)
+    )
+    # 3. Call and assert
+    res = handle_task("Plot without vs")
+    assert res["task_type"] == "plot"
+    assert "error" in res
+    assert "could not extract columns" in res["error"].lower()

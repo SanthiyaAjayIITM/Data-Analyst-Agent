@@ -2,6 +2,8 @@ import duckdb
 import pandas as pd
 import numpy as np  # Add this import
 
+
+
 S3_PATH = "s3://indian-high-court-judgments/metadata/parquet/year=*/court=*/bench=*/metadata.parquet?s3_region=ap-south-1"
 
 def get_most_active_court(start_year: int, end_year: int) -> str:

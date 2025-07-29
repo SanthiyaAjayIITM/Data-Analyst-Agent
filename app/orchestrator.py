@@ -62,79 +62,100 @@ def handle_task(question_text: str) -> dict:
 
     # Scrape path
     if parsed["task_type"] == "scrape":
-        df = scraper_module.scrape_wikipedia_table(parsed["param"])
+        try:
+            df = scraper_module.scrape_wikipedia_table(parsed["param"])
 
-        # 1) Film‑analysis path
-        if "film" in question_text.lower():
-            from app.analyzer import compute_correlation
-            count_2bn = int(((df["Worldwide"] >= 2_000_000_000) & (df["Year"] < 2020)).sum())
-            df15 = df[df["Worldwide"] >= 1_500_000_000]
-            earliest = df15.loc[df15["Year"].idxmin(), "Title"] if not df15.empty else ""
-            corr = compute_correlation(df, "Rank", "Peak")
+            # 1) Film‑analysis path
+            if "film" in question_text.lower():
+                from app.analyzer import compute_correlation
+                count_2bn = int(((df["Worldwide"] >= 2_000_000_000) & (df["Year"] < 2020)).sum())
+                df15 = df[df["Worldwide"] >= 1_500_000_000]
+                earliest = df15.loc[df15["Year"].idxmin(), "Title"] if not df15.empty else ""
+                corr = compute_correlation(df, "Rank", "Peak")
+                return {
+                    "echo": question_text,
+                    **parsed,
+                    "count_2bn_before_2020": count_2bn,
+                    "earliest_over_1.5bn": earliest,
+                    "rank_peak_corr": corr,
+                }
+
+            # 2) Generic scrape path
             return {
                 "echo": question_text,
                 **parsed,
-                "count_2bn_before_2020": count_2bn,
-                "earliest_over_1.5bn": earliest,
-                "rank_peak_corr": corr,
+                "row_count": len(df),
+                "columns": df.columns.tolist(),
             }
-
-        # 2) Generic scrape path
-        return {
-            "echo": question_text,
-            **parsed,
-            "row_count": len(df),
-            "columns": df.columns.tolist(),
-        }
+        except Exception as e:
+            return {
+                "echo": question_text,
+                "task_type": parsed["task_type"],
+                "error": str(e)
+            }
 
     # Query path
     if parsed["task_type"] == "query":
-        text = question_text.lower()
+        try:
+            text = question_text.lower()
 
-        # 1) Most active court question
-        if "disposed the most cases" in text:
-            court = get_most_active_court(2019, 2022)
-            return {"echo": question_text, **parsed, "most_active_court": court}
+            # 1) Most active court question
+            if "disposed the most cases" in text:
+                court = get_most_active_court(2019, 2022)
+                return {"echo": question_text, **parsed, "most_active_court": court}
 
-        # 2) Delay slope by court
-        if "regression slope" in text:
-            # extract court_code from param or text
-            m = re.search(r"court=([\w_]+)", text)
-            code = m.group(1) if m else parsed["param"]
-            slope = compute_delay_slope(code)
-            return {"echo": question_text, **parsed, "delay_slope": slope}
+            # 2) Delay slope by court
+            if "regression slope" in text:
+                # extract court_code from param or text
+                m = re.search(r"court=([\w_]+)", text)
+                code = m.group(1) if m else parsed["param"]
+                slope = compute_delay_slope(code)
+                return {"echo": question_text, **parsed, "delay_slope": slope}
 
-        # 3) Generic SQL flow
-        df = query_duckdb(parsed["param"])
-        return {"echo": question_text, **parsed, "row_count": len(df), "columns": df.columns.tolist()}
+            # 3) Generic SQL flow
+            df = query_duckdb(parsed["param"])
+            return {"echo": question_text, **parsed, "row_count": len(df), "columns": df.columns.tolist()}
+        except Exception as e:
+            return {
+                "echo": question_text,
+                "task_type": parsed["task_type"],
+                "error": str(e)
+            }
 
     # Plot path
     if parsed["task_type"] == "plot":
-        param = parsed.get("param", "")
+        try:
+            param = parsed.get("param", "")
 
-        # Legacy semicolon‑format support (for tests)
-        if ";" in param and all(
-            c.isdigit() or c in ",.;" for c in param.replace(" ", "")
-        ):
-            xs, ys = param.split(";")
-            x_vals = [float(v) for v in xs.split(",") if v]
-            y_vals = [float(v) for v in ys.split(",") if v]
-            img = plotter_module.scatter_with_regression(x_vals, y_vals, "x", "y")
+            # Legacy semicolon‑format support (for tests)
+            if ";" in param and all(
+                c.isdigit() or c in ",.;" for c in param.replace(" ", "")
+            ):
+                xs, ys = param.split(";")
+                x_vals = [float(v) for v in xs.split(",") if v]
+                y_vals = [float(v) for v in ys.split(",") if v]
+                img = plotter_module.scatter_with_regression(x_vals, y_vals, "x", "y")
+                return {"echo": question_text, **parsed, "image": img}
+
+            # Real‑data plotting
+            x_col, y_col = extract_plot_columns(question_text)
+            if not x_col or not y_col:
+                raise ValueError("Could not extract columns for plot")
+
+            df = scraper_module.scrape_wikipedia_table(parsed["param"])
+            if x_col not in df.columns or y_col not in df.columns:
+                raise ValueError(f"Columns {x_col!r} or {y_col!r} not found in data")
+
+            x_vals = df[x_col].astype(float).tolist()
+            y_vals = df[y_col].astype(float).tolist()
+            img = plotter_module.scatter_with_regression(x_vals, y_vals, x_col, y_col)
             return {"echo": question_text, **parsed, "image": img}
-
-        # Real‑data plotting
-        x_col, y_col = extract_plot_columns(question_text)
-        if not x_col or not y_col:
-            raise ValueError("Could not extract columns for plot")
-
-        df = scraper_module.scrape_wikipedia_table(parsed["param"])
-        if x_col not in df.columns or y_col not in df.columns:
-            raise ValueError(f"Columns {x_col!r} or {y_col!r} not found in data")
-
-        x_vals = df[x_col].astype(float).tolist()
-        y_vals = df[y_col].astype(float).tolist()
-        img = plotter_module.scatter_with_regression(x_vals, y_vals, x_col, y_col)
-        return {"echo": question_text, **parsed, "image": img}
+        except Exception as e:
+            return {
+                "echo": question_text,
+                "task_type": parsed["task_type"],
+                "error": str(e)
+            }
 
     # Fallback echo
     return {"echo": question_text, **parsed}

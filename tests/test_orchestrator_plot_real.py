@@ -35,3 +35,25 @@ def test_handle_task_plot_real(monkeypatch):
     assert called["y"] == [3.0, 4.0]
     assert called["xl"] == "A"
     assert called["yl"] == "B"
+
+def test_handle_task_plot_real_bad_df(monkeypatch):
+    # 1. Force parse to plot
+    monkeypatch.setattr(
+        "app.orchestrator.ask_llm_to_parse",
+        lambda t: {"task_type": "plot", "param": "http://example.com/table"}
+    )
+    # 2. Stub extract_plot_columns to valid cols
+    monkeypatch.setattr(
+        "app.orchestrator.extract_plot_columns",
+        lambda t: ("X", "Y")
+    )
+    # 3. Stub scraper to return DF missing those cols
+    monkeypatch.setattr(
+        "app.scraper.scrape_wikipedia_table",
+        lambda url: pd.DataFrame({"Z":[1,2,3]})
+    )
+    # 4. Call and assert
+    res = handle_task("Plot X vs Y from table")
+    assert res["task_type"] == "plot"
+    assert "error" in res
+    assert "not found in data" in res["error"].lower()
