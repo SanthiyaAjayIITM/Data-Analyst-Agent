@@ -46,7 +46,9 @@ def parse_task(question_text: str) -> Dict[str, str]:
     # 4. Fallback
     return {"task_type": "unknown", "param": ""}
 
+from functools import lru_cache
 
+@lru_cache(maxsize=128)
 def ask_llm_to_parse(question_text: str) -> Dict[str, str]:
     """
     Placeholder for future LLM parsing.

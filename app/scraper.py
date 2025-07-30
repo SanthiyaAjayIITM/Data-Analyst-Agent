@@ -2,6 +2,9 @@
 
 import pandas as pd
 
+from functools import lru_cache
+
+@lru_cache(maxsize=128)
 def scrape_wikipedia_table(url: str) -> pd.DataFrame:
     """
     Fetch the first HTML table from the given Wikipedia URL
