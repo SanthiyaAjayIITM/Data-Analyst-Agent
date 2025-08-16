@@ -11,4 +11,4 @@ matplotlib
 loguru
 python-dotenv
 pytest
-
+lxml

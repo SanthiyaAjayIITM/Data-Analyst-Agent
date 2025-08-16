@@ -1,5 +1,6 @@
 import re
 from typing import Dict, Tuple, Optional
+import pandas as pd
 
 import app.scraper as scraper_module
 from app.duckdb_client import query_duckdb
@@ -22,15 +23,14 @@ def extract_plot_columns(text: str) -> Tuple[Optional[str], Optional[str]]:
     y_col = right.split()[0] if right else None
     return x_col, y_col
 
-
 def parse_task(question_text: str) -> Dict[str, str]:
     """
     Determine task type and param.
     """
     text = question_text.lower()
 
-    # 1. Scrape if keyword 'scrape' present
-    if "scrape" in text:
+    # 1. Scrape if a URL is present OR 'scrape' keyword is used
+    if re.search(r'https?://[^\s]+', question_text) or "scrape" in text:
         m = re.search(r'https?://[^\s]+', question_text)
         url = m.group(0) if m else ""
         return {"task_type": "scrape", "param": url}
@@ -66,21 +66,47 @@ def handle_task(question_text: str) -> dict:
     if parsed["task_type"] == "scrape":
         try:
             df = scraper_module.scrape_wikipedia_table(parsed["param"])
+            # Normalize column names
+            df.columns = [c.strip().replace("\xa0", " ") for c in df.columns]
+            if "Worldwide gross" in df.columns and "Worldwide" not in df.columns:
+                df = df.rename(columns={"Worldwide gross": "Worldwide"})
 
-            # 1) Film‑analysis path
+            # 1) Film-analysis path
             if "film" in question_text.lower():
                 from app.analyzer import compute_correlation
-                count_2bn = int(((df["Worldwide"] >= 2_000_000_000) & (df["Year"] < 2020)).sum())
-                df15 = df[df["Worldwide"] >= 1_500_000_000]
-                earliest = df15.loc[df15["Year"].idxmin(), "Title"] if not df15.empty else ""
-                corr = compute_correlation(df, "Rank", "Peak")
-                return {
-                    "echo": question_text,
-                    **parsed,
-                    "count_2bn_before_2020": count_2bn,
-                    "earliest_over_1.5bn": earliest,
-                    "rank_peak_corr": corr,
-                }
+
+                # Clean up numeric columns
+                if "Worldwide" in df.columns:
+                    df["Worldwide"] = (
+                        df["Worldwide"]
+                        .astype(str)
+                        .str.replace(r"[^\d.]", "", regex=True)
+                        .astype(float)
+                    )
+                for col in ["Rank", "Peak", "Year"]:
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+                try:
+                    count_2bn = int(((df["Worldwide"] >= 2_000_000_000) & (df["Year"] < 2020)).sum())
+                    df15 = df[df["Worldwide"] >= 1_500_000_000]
+                    earliest = df15.loc[df15["Year"].idxmin(), "Title"] if not df15.empty else ""
+                    corr = compute_correlation(df, "Rank", "Peak")
+                    return {
+                        "echo": question_text,
+                        **parsed,
+                        "count_2bn_before_2020": count_2bn,
+                        "earliest_over_1.5bn": earliest,
+                        "rank_peak_corr": corr,
+                    }
+                except Exception as e:
+                    return {
+                        "echo": question_text,
+                        **parsed,
+                        "error": str(e),
+                        "available_columns": df.columns.tolist(),
+                        "preview_rows": df.head().to_dict(orient="records"),
+                    }
 
             # 2) Generic scrape path
             return {
@@ -93,7 +119,8 @@ def handle_task(question_text: str) -> dict:
             return {
                 "echo": question_text,
                 "task_type": parsed["task_type"],
-                "error": str(e)
+                "error": str(e),
+                "available_columns": df.columns.tolist() if 'df' in locals() else []
             }
 
     # Query path

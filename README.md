@@ -76,6 +76,8 @@ Host: localhost:8000
 { "status": "ok" }
 ```
 
+---
+
 ### Task Endpoint
 
 ```http
@@ -86,24 +88,43 @@ Content-Type: application/json
 { "question_text": "<your natural-language task>" }
 ```
 
-**Common Response Fields**
-
-* `echo`: original question text
-* `task_type`: one of `"scrape"`, `"query"`, `"plot"`, etc.
-
-**Example: Scrape Films**
-
-```bash
-curl -X POST http://localhost:8000/api/ \
-  -H 'Content-Type: application/json' \
-  -d '{"question_text": "Analyze highest grossing films from https://en.wikipedia.org/wiki/List_of_highest-grossing_films"}'
-```
-
-**Sample JSON**
+**Request Model**
 
 ```json
 {
-  "echo": "Analyze highest grossing films from https://...",
+  "question_text": "Your question here"
+}
+```
+
+**Common Response Fields**
+
+* `echo`: original question text
+* `task_type`: one of `"scrape"`, `"query"`, `"plot"`, `"film"`, `"highcourt"`, or `"unknown"`
+* `param`: the URL, SQL, or raw parameter extracted
+
+**Response Schemas by Task Type**
+
+<details>
+<summary><strong>Scrape (generic)</strong></summary>
+
+```json
+{
+  "echo": "...",
+  "task_type": "scrape",
+  "param": "https://...",
+  "row_count": 10,
+  "columns": ["A", "B"]
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Film Analysis</strong></summary>
+
+```json
+{
+  "echo": "...",
   "task_type": "scrape",
   "param": "https://...",
   "count_2bn_before_2020": 2,
@@ -112,24 +133,51 @@ curl -X POST http://localhost:8000/api/ \
 }
 ```
 
-**Example: High Court Query**
+</details>
 
-```bash
-curl -X POST http://localhost:8000/api/ \
-  -H 'Content-Type: application/json' \
-  -d '{"question_text": "Which high court disposed the most cases from 2019 - 2022?"}'
-```
-
-**Sample JSON**
+<details>
+<summary><strong>Query (generic)</strong></summary>
 
 ```json
 {
-  "echo": "Which high court disposed...",
+  "echo": "...",
   "task_type": "query",
-  "param": "",
-  "most_active_court": "33_10"
+  "param": "SELECT ...",
+  "row_count": 5,
+  "columns": ["col1", "col2"]
 }
 ```
+
+</details>
+
+<details>
+<summary><strong>High Court Analysis</strong></summary>
+
+```json
+{
+  "echo": "...",
+  "task_type": "query",
+  "param": "",
+  "most_active_court": "33_10",
+  "delay_slope": 5.5
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Plot</strong></summary>
+
+```json
+{
+  "echo": "...",
+  "task_type": "plot",
+  "param": "0,1,2;0,1,2",
+  "image": "data:image/png;base64,..."
+}
+```
+
+</details>
 
 ---
 
