@@ -22,6 +22,7 @@ jobs:
         run: docker build -t data-analyst-agent .
       - name: Run tests inside container
         run: docker run --rm data-analyst-agent pytest -q
-      - name: Run tests
+            - name: Run tests (host)
         run: |
-          pytest
+          export PYTHONPATH=.
+          pytest -q
